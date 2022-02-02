@@ -14,4 +14,10 @@ inline int floorInt(float num) {
     return num < 0 ? (int) num - 1 : (int) num;
 }
 
+inline float limitMagnitude(float x, float max) {
+    if (x > max) return max;
+    else if (x < -max) return -max;
+    return x;
+}
+
 #endif

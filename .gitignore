@@ -6,7 +6,6 @@ CMakeFiles/*
 Makefile
 cmake_install.cmake
 compile_commands.json
-CMakeLists.txt
 *.exe
 myapp
 .vscode

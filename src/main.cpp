@@ -18,6 +18,9 @@
 #include <box2d/box2d.h>
 #define MY_PI 3.1415926535979323f
 
+const float MAX_HORIZONTAL_VELOCITY = 20.0f;
+const float MAX_VERTICAL_VELOCITY = 20.0f;
+
 const float MOVE_INTERPOLATE_DISTANCE_LIMIT = 0.1f;
 
 void debugGLMessage(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void* userPtr) {
@@ -136,7 +139,6 @@ void Game::run() {
             glfwGetCursorPos(window, &mx, &my);
             glm::vec2 mousePos = {mx, my};
 
-
             glm::vec2 mouseWorldPos = camera.toWorldCoordinate(mousePos);
 
             // draw on the grid with the mouse
@@ -150,6 +152,12 @@ void Game::run() {
             if (!paused) physicsTime += delta;
             double timeStep = 1.0 / 60.0f;
             while (physicsTime > timeStep) {
+
+                // player movement
+                // options I can think of for limiting movement:
+                // only applyForce when velocity in a direction is below a limit
+                // applyForce backwards when velocity in a direction is too high
+                // setVelocity to the limit when it is above a limit
                 b2Vec2 playerMove(0.0f, 0.0f);
                 float playerJump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS ? -10.0f : 0.0f;
                 playerMove.x += (glfwGetKey(window, GLFW_KEY_L) - glfwGetKey(window, GLFW_KEY_J));
@@ -163,6 +171,11 @@ void Game::run() {
                 if (playerMoveForce.LengthSquared() > 0.00001f) {
                     player->rigidBody->ApplyForce(playerMoveForce, player->rigidBody->GetPosition(), true);
                 }
+
+                b2Vec2 velocity = player->rigidBody->GetLinearVelocity();
+                velocity.x = limitMagnitude(velocity.x, MAX_HORIZONTAL_VELOCITY);
+                velocity.y = limitMagnitude(velocity.y, MAX_VERTICAL_VELOCITY);
+
                 if (playerJump != 0) {
                     // check player can jump
                     //std::cout << "Player trying to jump" << std::endl;
