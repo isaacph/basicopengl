@@ -25,7 +25,7 @@
 #include <box2d/box2d.h>
 #include <set>
 
-const float GRAV_ACCEL= 1.0f;
+const float GRAV_ACCEL= 20.0f;
 const float MAX_FALL= 10.0f;
 const float JUMP_INIT_VELOCITY= -5.0f;
 const float VERT_FRICTION= 1.0f;
@@ -83,6 +83,7 @@ public:
     ~GameObject();
 
     bool onGround = false;
+    float airTime = 0;
 private:
     b2World* world;
     Game* game;
@@ -106,7 +107,7 @@ private:
     Camera camera;
     bool foward;
     GridManager gridManager;
-    b2World box2dWorld = b2World(b2Vec2(0.0f, 9.8f));
+    b2World box2dWorld = b2World(b2Vec2(0.0f, GRAV_ACCEL));
     double physicsTime = 0;
     bool paused = false;
     //b2Body* groundBody;
@@ -157,6 +158,7 @@ public:
     int numJumps;
     float maxSpeed;
 };
+
 class World {
 public:
     Player player;

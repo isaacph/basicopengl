@@ -18,9 +18,9 @@
 #include <box2d/box2d.h>
 #define MY_PI 3.1415926535979323f
 
-const float MAX_HORIZONTAL_VELOCITY = 20.0f;
+const float MAX_HORIZONTAL_VELOCITY = 10.0f;
 const float MAX_VERTICAL_VELOCITY = 20.0f;
-
+const float PLAYER_JUMP_IMPULSE_AMOUNT = 10.0f;
 const float MOVE_INTERPOLATE_DISTANCE_LIMIT = 0.1f;
 
 void debugGLMessage(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void* userPtr) {
@@ -159,37 +159,64 @@ void Game::run() {
                 // applyForce backwards when velocity in a direction is too high
                 // setVelocity to the limit when it is above a limit
                 b2Vec2 playerMove(0.0f, 0.0f);
-                float playerJump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS ? -10.0f : 0.0f;
-                playerMove.x += (glfwGetKey(window, GLFW_KEY_L) - glfwGetKey(window, GLFW_KEY_J));
+                bool playerJump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+                bool playerSlowDown = false;
+                playerMove.x += (glfwGetKey(window, GLFW_KEY_D) - glfwGetKey(window, GLFW_KEY_A));
                 if (playerMove.LengthSquared() > 0) {
                     playerMove.x *= 1.0f / playerMove.Length();
                     playerMove.y *= 1.0f / playerMove.Length();
                 }
-                
-                playerMove *= 1000;
-                b2Vec2 playerMoveForce(playerMove.x * timeStep, playerMove.y * timeStep);
-                if (playerMoveForce.LengthSquared() > 0.00001f) {
-                    player->rigidBody->ApplyForce(playerMoveForce, player->rigidBody->GetPosition(), true);
+
+                // make player slow down if not trying to move
+                if (playerMove.LengthSquared() < 0.00001f && player->onGround && abs(player->rigidBody->GetLinearVelocity().x) > 0) {
+                    float movingDir = player->rigidBody->GetLinearVelocity().x;
+                    if (movingDir > 0) playerMove.x = -1;
+                    if (movingDir < 0) playerMove.x = +1;
+                    playerSlowDown = true;
                 }
 
-                b2Vec2 velocity = player->rigidBody->GetLinearVelocity();
-                velocity.x = limitMagnitude(velocity.x, MAX_HORIZONTAL_VELOCITY);
-                velocity.y = limitMagnitude(velocity.y, MAX_VERTICAL_VELOCITY);
+                playerMove *= 1000 / 60.0f;
+                if (player->onGround) {
+                    playerMove *= 2;
+                }
 
-                if (playerJump != 0) {
+                if (playerJump) {
                     // check player can jump
-                    //std::cout << "Player trying to jump" << std::endl;
+                    // std::cout << "Player trying to jump, og: " << player->onGround << std::endl;
 
                     if (player->onGround) {
-                        b2Vec2 playerJumpImpulse(0, playerJump);
+                        b2Vec2 playerJumpImpulse(0, -PLAYER_JUMP_IMPULSE_AMOUNT);
                         if (playerJumpImpulse.LengthSquared() > 0.00001f) {
                             player->rigidBody->ApplyLinearImpulseToCenter(playerJumpImpulse, true);
                             player->rigidBody->SetTransform(player->rigidBody->GetPosition() + b2Vec2(0, -0.01f), player->rigidBody->GetAngle());
                         }
+                    } else {
+                        if (player->airTime < 0.5f) {
+                            playerMove.y -= 10;
+                        }
                     }
                 }
+
+                // stop player if he slows down enough
+                if (playerSlowDown && abs(playerMove.x) * timeStep > abs(player->rigidBody->GetLinearVelocity().x)) {
+                    playerMove.x = 0;
+                    player->rigidBody->SetLinearVelocity(b2Vec2(0, player->rigidBody->GetLinearVelocity().y));
+                }
+
+                b2Vec2 playerMoveForce(playerMove.x, playerMove.y);
+                if (playerMoveForce.LengthSquared() > 0.00001f) {
+                    player->rigidBody->ApplyForce(playerMoveForce, player->rigidBody->GetPosition(), true);
+                }
+                b2Vec2 velocity = player->rigidBody->GetLinearVelocity();
+                velocity.x = limitMagnitude(velocity.x, MAX_HORIZONTAL_VELOCITY);
+                velocity.y = limitMagnitude(velocity.y, MAX_VERTICAL_VELOCITY);
+                player->rigidBody->SetLinearVelocity(velocity);
+
                 for (GameObject* obj : gameObjects) {
-                    obj->onGround = false;
+                    if (obj->rigidBody->IsAwake()) {
+                        obj->onGround = false;
+                        obj->airTime += timeStep;
+                    }
                 }
                 box2dWorld.Step(timeStep, 8, 3);
                 physicsTime -= timeStep;
@@ -283,10 +310,10 @@ void Game::onKey(int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
-    if (key == GLFW_KEY_J && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_A && action == GLFW_PRESS) {
         foward=false;
     }
-    if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_D && action == GLFW_PRESS) {
         foward=true;
     }
     if (key == GLFW_KEY_P && action == GLFW_PRESS) {

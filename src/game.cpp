@@ -90,9 +90,10 @@ std::unique_ptr<GameObject> makePlayer(Game* game, b2World* world, glm::vec2 pos
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &dynamicBox;
     fixtureDef.density = 1.0f;
-    fixtureDef.friction = 0.3f;
+    fixtureDef.friction = 1.0f;
     b2Fixture* playerFixture = playerBody->CreateFixture(&fixtureDef);
-    playerFixture->SetFriction(1.0f);
+    playerFixture->SetFriction(0.1f);
+    playerFixture->SetRestitution(0.0f);
 
     obj->rigidBody = playerBody;
     obj->fixture = playerFixture;
@@ -117,7 +118,7 @@ std::unique_ptr<GameObject> makeGroundType(Game* game, b2World* world, Box bodyD
     b2PolygonShape b2GroundBox;
     b2GroundBox.SetAsBox(bodyDef.scale.x / 2, bodyDef.scale.y / 2);
     b2Fixture* groundFixture = groundBody->CreateFixture(&b2GroundBox, 0.0f);
-    groundFixture->SetFriction(1.0f);
+    groundFixture->SetFriction(0.8f);
 
     obj->rigidBody = groundBody;
     obj->fixture = groundFixture;
@@ -200,8 +201,10 @@ void Game::PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) {
         // ground pushed object up
         if (groundIsA) {
             objB->onGround = true;
+            objB->airTime = 0;
         } else {
             objA->onGround = true;
+            objA->airTime = 0;
         }
     }
 }
