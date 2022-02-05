@@ -20,10 +20,6 @@
 #include <box2d/box2d.h>
 #define MY_PI 3.1415926535979323f
 
-const float MAX_HORIZONTAL_VELOCITY = 10.0f;
-const float MAX_VERTICAL_VELOCITY = 20.0f;
-const float PLAYER_JUMP_IMPULSE_AMOUNT = 10.0f;
-const float MOVE_INTERPOLATE_DISTANCE_LIMIT = 0.1f;
 
 void debugGLMessage(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void* userPtr) {
     std::cout << "OpenGL Debug Message: (src: " << source << ", type: " << type << ", id: " << id << ", sev: " << severity << ", len: " << length << ", message:\n";
@@ -107,21 +103,11 @@ void Game::run() {
         //b2Fixture* playerFixture = playerBody->CreateFixture(&fixtureDef);
         //playerFixture->SetFriction(5.0f);
 
-        std::unique_ptr<GameObject> player = makePlayer(this, &box2dWorld, {0.0f, -5.0f});
-        std::unique_ptr<GameObject> ground = makeGroundType(this, &box2dWorld, Box{{0.0f, 5.0f}, {20.0f, 10.0f}});
-        std::unique_ptr<Enemy> enemy = makeEnemy(this, &box2dWorld, {5.0f, -5.0f});
-
-        struct Wave {
-            glm::vec2 center;
-            float timer;
-        };
-        std::vector<Wave> waves;
-
         std::map<GridPos, TexturedBuffer> gridRendering;
         std::map<GridPos, std::vector<std::unique_ptr<GameObject>>> gridHitboxes;
-        b2World* worldPtr = &box2dWorld;
+        b2World* worldPtr = &world.box2dWorld;
         worldPtr->SetContactListener(this);
-        auto gridChangeSub = gridManager.gridChanges.subscribe([this, &gridRendering, &gridHitboxes, &worldPtr](std::pair<GridPos, Grid> grid) {
+        auto gridChangeSub = world.gridManager.gridChanges.subscribe([this, &gridRendering, &gridHitboxes, &worldPtr](std::pair<GridPos, Grid> grid) {
             std::vector<GLfloat> testBuffer = makeTexturedBuffer(grid.second);
             auto p = gridRendering.find(grid.first);
             if (p != gridRendering.end()) {
@@ -129,11 +115,11 @@ void Game::run() {
             } else {
                 gridRendering.insert({grid.first, TexturedBuffer(testBuffer)});
             }
-            gridHitboxes[grid.first] = std::move(makeGround(this, worldPtr, grid.first, grid.second));
+            gridHitboxes[grid.first] = std::move(makeGround(&world, grid.first, grid.second));
         });
-        gridManager.set(1, 0, 0);
+        world.gridManager.set(1, 0, 0);
 
-        camera.zoom(16.0f);
+        world.camera.zoom(16.0f);
 
         while (!glfwWindowShouldClose(window)) {
             currentTime = glfwGetTime();
@@ -151,150 +137,27 @@ void Game::run() {
             glfwGetCursorPos(window, &mx, &my);
             glm::vec2 mousePos = {mx, my};
 
-            glm::vec2 mouseWorldPos = camera.toWorldCoordinate(mousePos);
+            glm::vec2 mouseWorldPos = world.camera.toWorldCoordinate(mousePos);
 
             // draw on the grid with the mouse
             if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-                gridManager.set(1, floorInt(mouseWorldPos.x), floorInt(mouseWorldPos.y));
+                world.gridManager.set(1, floorInt(mouseWorldPos.x), floorInt(mouseWorldPos.y));
             }
             if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-                gridManager.set(air, floorInt(mouseWorldPos.x), floorInt(mouseWorldPos.y));
+                world.gridManager.set(air, floorInt(mouseWorldPos.x), floorInt(mouseWorldPos.y));
             }
 
             if (!paused) physicsTime += delta;
             double timeStep = 1.0 / 60.0f;
             while (physicsTime > timeStep) {
-
-                // player movement
-                // options I can think of for limiting movement:
-                // only applyForce when velocity in a direction is below a limit
-                // applyForce backwards when velocity in a direction is too high
-                // setVelocity to the limit when it is above a limit
-                b2Vec2 playerMove(0.0f, 0.0f);
-                bool playerJump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
-                bool playerSlowDown = false;
-                playerMove.x += (glfwGetKey(window, GLFW_KEY_D) - glfwGetKey(window, GLFW_KEY_A));
-                if (playerMove.LengthSquared() > 0) {
-                    playerMove.x *= 1.0f / playerMove.Length();
-                    playerMove.y *= 1.0f / playerMove.Length();
-                }
-
-                // make player slow down if not trying to move
-                if (playerMove.LengthSquared() < 0.00001f && player->onGround && abs(player->rigidBody->GetLinearVelocity().x) > 0) {
-                    float movingDir = player->rigidBody->GetLinearVelocity().x;
-                    if (movingDir > 0) playerMove.x = -1;
-                    if (movingDir < 0) playerMove.x = +1;
-                    playerSlowDown = true;
-                }
-
-                playerMove *= 1000 / 60.0f;
-                if (player->onGround) {
-                    playerMove *= 2;
-                }
-
-                if (playerJump) {
-                    // check player can jump
-                    // std::cout << "Player trying to jump, og: " << player->onGround << std::endl;
-
-                    if (player->onGround) {
-                        b2Vec2 playerJumpImpulse(0, -PLAYER_JUMP_IMPULSE_AMOUNT);
-                        if (playerJumpImpulse.LengthSquared() > 0.00001f) {
-                            player->rigidBody->ApplyLinearImpulseToCenter(playerJumpImpulse, true);
-                            player->rigidBody->SetTransform(player->rigidBody->GetPosition() + b2Vec2(0, -0.01f), player->rigidBody->GetAngle());
-                        }
-                    } else {
-                        if (player->airTime < 0.5f) {
-                            playerMove.y -= 10;
-                        }
-                    }
-                }
-
-                // stop player if he slows down enough
-                if (playerSlowDown && abs(playerMove.x) * timeStep > abs(player->rigidBody->GetLinearVelocity().x)) {
-                    playerMove.x = 0;
-                    player->rigidBody->SetLinearVelocity(b2Vec2(0, player->rigidBody->GetLinearVelocity().y));
-                }
-
-                b2Vec2 playerMoveForce(playerMove.x, playerMove.y);
-                if (playerMoveForce.LengthSquared() > 0.00001f) {
-                    player->rigidBody->ApplyForce(playerMoveForce, player->rigidBody->GetPosition(), true);
-                }
-                b2Vec2 velocity = player->rigidBody->GetLinearVelocity();
-                velocity.x = limitMagnitude(velocity.x, MAX_HORIZONTAL_VELOCITY);
-                velocity.y = limitMagnitude(velocity.y, MAX_VERTICAL_VELOCITY);
-                player->rigidBody->SetLinearVelocity(velocity);
-
-                std::vector<int> wavesToDelete;
-                for (int i = 0; i < (int) waves.size(); ++i) {
-                    Wave& wave = waves[i];
-                    wave.timer += delta;
-                    if (wave.timer > 1.0f) {
-                        wavesToDelete.push_back(i);
-                    }
-                }
-                for (int i = (int) wavesToDelete.size() - 1; i >= 0; --i) {
-                    int index = wavesToDelete[i];
-                    waves.erase(waves.begin() + index);
-                }
-
-                bool playerInRange = (player->rigidBody->GetPosition() - enemy->rigidBody->GetPosition()).Length() < 8;
-                switch (enemy->mode) {
-                    case Enemy::ASLEEP:
-                        if (playerInRange) {
-                            enemy->timer += delta;
-                            if (enemy->timer > 0.5f) {
-                                enemy->mode = Enemy::AWAKE;
-                                enemy->timer -= 0.5f;
-                                enemy->faceRight = player->rigidBody->GetPosition().x > enemy->rigidBody->GetPosition().x;
-                            }
-                        } else {
-                            enemy->timer -= delta;
-                            enemy->timer = std::max(enemy->timer, 0.0f);
-                        }
-                        break;
-                    case Enemy::AWAKE:
-                        if (!playerInRange) {
-                            enemy->mode = Enemy::ASLEEP;
-                            enemy->timer = 0.5f;
-                        } else {
-                            enemy->timer += delta;
-                            if (enemy->timer > 0.2f) {
-                                enemy->mode = Enemy::ATTACKED;
-                                enemy->timer -= 0.2f;
-                                Wave wave;
-                                wave.center = glm::vec2(enemy->rigidBody->GetPosition().x + (!enemy->faceRight ? -0.76f : 0.76f), enemy->rigidBody->GetPosition().y - 0.65f);
-                                wave.timer = 0.0f;
-                                waves.push_back(wave);
-                            }
-                        }
-                        break;
-                    case Enemy::ATTACKED:
-                        enemy->timer += delta;
-                        if (enemy->timer > 1.0f) {
-                            enemy->mode = Enemy::AWAKE;
-                            enemy->timer -= 1.0f;
-                            enemy->faceRight = player->rigidBody->GetPosition().x > enemy->rigidBody->GetPosition().x;
-                        }
-                        break;
-                    default:
-                        enemy->timer = 0.0f;
-                        enemy->mode = Enemy::ASLEEP;
-                }
-
-                for (GameObject* obj : gameObjects) {
-                    if (obj->rigidBody->IsAwake()) {
-                        obj->onGround = false;
-                        obj->airTime += timeStep;
-                    }
-                }
-                box2dWorld.Step(timeStep, 8, 3);
+                world.update(timeStep, window);
                 physicsTime -= timeStep;
             }
             //start rendering
             glClear(GL_COLOR_BUFFER_BIT);
 
-            b2Vec2 playerPos = player->rigidBody->GetPosition();
-            camera.center(playerPos.x, playerPos.y);
+            b2Vec2 playerPos = world.player->rigidBody->GetPosition();
+            world.camera.center(playerPos.x, playerPos.y);
             Box playerRenderBox;
             playerRenderBox.position = {playerPos.x, playerPos.y + 0.06f};
             float playerScale = 3.3f;
@@ -308,22 +171,23 @@ void Game::run() {
 
             glm::mat4 playerMatrix;
             playerMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(playerRenderBox.position.x, playerRenderBox.position.y, 0));
-            playerMatrix = glm::rotate(playerMatrix, player->rigidBody->GetAngle(), glm::vec3(0, 0, 1));
+            playerMatrix = glm::rotate(playerMatrix, world.player->rigidBody->GetAngle(), glm::vec3(0, 0, 1));
             playerMatrix = glm::scale(playerMatrix, glm::vec3(playerRenderBox.scale.x, playerRenderBox.scale.y, 0));
-            glm::mat4 hitboxMatrix = toMatrix(Box{glm::vec2(player->rigidBody->GetPosition().x, player->rigidBody->GetPosition().y), ((BoxBodyType*) player->bodyType.get())->scale});
+            glm::mat4 hitboxMatrix = toMatrix(Box{glm::vec2(world.player->rigidBody->GetPosition().x, world.player->rigidBody->GetPosition().y), ((BoxBodyType*) world.player->bodyType.get())->scale});
             glBindTexture(GL_TEXTURE_2D, tex3);
 //            simpleRender.render(proj * camera.getView() * hitboxMatrix, glm::vec4(1.0f));
-            textureRender.render(proj * camera.getView() * playerMatrix, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0);
+            textureRender.render(proj * world.camera.getView() * playerMatrix, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0);
 
             Box groundBox;
-            b2Vec2 groundPos = ground->rigidBody->GetPosition();
+            b2Vec2 groundPos = world.ground->rigidBody->GetPosition();
             b2Vec2 groundScale = {20, 10};
             groundBox.position = {groundPos.x, groundPos.y};
             groundBox.scale = {groundScale.x, groundScale.y};
             glm::mat4 groundMatrix = toMatrix(groundBox);
             glBindTexture(GL_TEXTURE_2D, tex2);
-            textureRender.render(proj * camera.getView() * groundMatrix, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0);
+            textureRender.render(proj * world.camera.getView() * groundMatrix, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0);
 
+            Enemy* enemy = world.enemy.get();
             Box enemyRenderBox = {
                 {enemy->rigidBody->GetPosition().x, enemy->rigidBody->GetPosition().y - 0.5f},
                 {enemy->faceRight ? -2.0f : 2.0f, 2.0f}
@@ -344,7 +208,7 @@ void Game::run() {
             glm::mat4 enemyMatrix;
             enemyMatrix = toMatrix(enemyRenderBox);
             glBindTexture(GL_TEXTURE_2D, texEnemy1);
-            spritesheetRender.render(proj * camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+            spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
 
             for (const auto& p : gridRendering) {
                 GridPos pos = p.first;
@@ -353,10 +217,10 @@ void Game::run() {
                 gridBox.position = {pos.x * GRID_SIZE, pos.y * GRID_SIZE};
                 gridBox.scale = {GRID_SIZE, GRID_SIZE};
                 glBindTexture(GL_TEXTURE_2D, tex);
-                draw.render(proj * camera.getView() * toMatrix(gridBox), glm::vec4(1.0f), 0);
+                draw.render(proj * world.camera.getView() * toMatrix(gridBox), glm::vec4(1.0f), 0);
             }
 
-            for (Wave wave : waves) {
+            for (Wave wave : world.waves) {
                 Box bounds;
                 bounds.position = wave.center;
                 bounds.scale.x = std::max(0.1f, wave.timer) * 15.0f;
@@ -364,9 +228,9 @@ void Game::run() {
                 float relativeRadius = wave.timer < 0.1f ? wave.timer / 0.1f * 0.4f : 0.4f;
                 float relativeThickness = wave.timer < 0.1f ? 0.2f : 0.2f * 1.0f / bounds.scale.x;
                 float transparency = constrain(wave.timer < 0.8f ? 1.0f : 1.0f - (wave.timer - 0.8f) / 0.2f, 0.0f, 1.0f) * 0.8f;
-                
+
                 glm::mat4 waveMatrix = toMatrix(bounds);
-                waveRender.render(proj * camera.getView() * waveMatrix, glm::vec4(1.0f, 1.0f, 1.0f, transparency), relativeRadius, relativeThickness);
+                waveRender.render(proj * world.camera.getView() * waveMatrix, glm::vec4(1.0f, 1.0f, 1.0f, transparency), relativeRadius, relativeThickness);
                 //waveRender.render(glm::mat4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, transparency), relativeRadius, relativeThickness);
             }
 
@@ -409,7 +273,7 @@ void Game::onResize(int width, int height) {
     windowWidth = width;
     windowHeight = height;
     proj = glm::ortho<float>(0, width, height, 0, 0, 1);
-    camera.onResize(width, height);
+    world.camera.onResize(width, height);
 }
 
 void Game::onKey(int key, int scancode, int action, int mods) {

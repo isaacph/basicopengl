@@ -68,7 +68,10 @@ struct BoxBodyType : public BodyType {
     glm::vec2 scale;
 };
 
+class World;
 class Game;
+class Ability;
+class Behavior;
 class GameObject {
 public:
     enum Type {
@@ -79,30 +82,74 @@ public:
     std::unique_ptr<BodyType> bodyType;
     b2Body* rigidBody;
     b2Fixture* fixture;
-    GameObject(Game* game, b2World* world);
+    GameObject(World* world);
+    virtual void update(double timeStep, World* world);
     virtual ~GameObject();
 
     bool onGround = false;
     float airTime = 0;
     bool faceRight = true;
+
+    // list of things this GameObject can do
+    // to avoid duplication of code if multiple enemy types with different behaviors
+    // can do similar things
+    std::vector<std::unique_ptr<Ability>> abilities;
+
+    // this is the script that controls this GameObject
+    std::unique_ptr<Behavior> behavior;
 private:
-    b2World* world;
-    Game* game;
+    World* world;
+};
+
+class Ability {
+public:
+    inline Ability(GameObject* gameObject) : gameObject(gameObject) {}
+    inline virtual ~Ability() {}
+    GameObject* const gameObject;
+};
+
+class Behavior {
+public:
+    inline Behavior(GameObject* gameObject) : gameObject(gameObject) {}
+    inline virtual ~Behavior() {}
+    virtual void update(double timeStep, World* world) = 0;
+    GameObject* const gameObject;
 };
 
 class Enemy : public GameObject {
 public:
-    inline Enemy(Game* game, b2World* world) : GameObject(game, world) {}
+    inline Enemy(World* world) : GameObject(world) {}
     float timer = 0.0f;
     enum Mode {
         ASLEEP, AWAKE, ATTACKED
     } mode = ASLEEP;
 };
 
-std::unique_ptr<GameObject> makePlayer(Game* game, b2World* world, glm::vec2 position);
-std::unique_ptr<Enemy> makeEnemy(Game* game, b2World* world, glm::vec2 position);
-std::unique_ptr<GameObject> makeGroundType(Game * game, b2World* world, Box bodyDef);
-std::vector<std::unique_ptr<GameObject>> makeGround(Game* game, b2World* world, GridPos gridPos, Grid grid);
+struct Wave {
+    glm::vec2 center;
+    float timer;
+};
+
+class World {
+public:
+    World();
+    void update(double timeStep, GLFWwindow* window);
+
+    b2World box2dWorld = b2World(b2Vec2(0.0f, GRAV_ACCEL));
+    GridManager gridManager;
+    Camera camera;
+    std::set<GameObject*> gameObjects;
+    std::vector<Wave> waves;
+
+    std::unique_ptr<GameObject> player;
+    std::unique_ptr<GameObject> ground;
+    std::unique_ptr<Enemy> enemy;
+};
+
+std::unique_ptr<GameObject> makePlayer(World* world, glm::vec2 position);
+std::unique_ptr<Enemy> makeEnemy(World* world, glm::vec2 position);
+std::unique_ptr<GameObject> makeGroundType(World* world, Box bodyDef);
+std::vector<std::unique_ptr<GameObject>> makeGround(World* world, GridPos gridPos, Grid grid);
 
 class Game : public b2ContactListener {
 public:
@@ -115,10 +162,8 @@ private:
     GLFWwindow* window;
     int windowWidth = 0, windowHeight = 0;
     glm::mat4 proj;
-    Camera camera;
+    World world;
     bool foward;
-    GridManager gridManager;
-    b2World box2dWorld = b2World(b2Vec2(0.0f, GRAV_ACCEL));
     double physicsTime = 0;
     bool paused = false;
     //b2Body* groundBody;
@@ -126,7 +171,6 @@ private:
     //b2Body* playerBody;
     //b2Fixture* playerFixture;
 public:
-    std::set<GameObject*> gameObjects;
     void BeginContact(b2Contact* contact);
      
     void EndContact(b2Contact* contact);
@@ -135,6 +179,7 @@ public:
      
     void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse);
 };
+
 
 class Player {
 public:
@@ -168,17 +213,6 @@ public:
     float airtime;
     int numJumps;
     float maxSpeed;
-};
-
-class World {
-public:
-    Player player;
-    GridManager gridManager;
-    void worldUpdate(float deltaF, PlayerInstruction instruct);
-private:
-    void playerMovement(float deltaF, PlayerInstruction instruct);
-    void updatePhysics(float deltaF);
-    void gravity(Player player, float deltaF);
 };
 
 #endif

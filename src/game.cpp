@@ -61,8 +61,8 @@ glm::vec2 Camera::toScreenCoordinate(glm::vec2 screenCoordinate) const {
     return screenCoordinate;
 }
 
-std::unique_ptr<GameObject> makePlayer(Game* game, b2World* world, glm::vec2 position) {
-    std::unique_ptr<GameObject> obj = std::unique_ptr<GameObject>(new GameObject(game, world));
+std::unique_ptr<GameObject> makePlayer(World* world, glm::vec2 position) {
+    std::unique_ptr<GameObject> obj = std::unique_ptr<GameObject>(new GameObject(world));
     obj->types = {GameObject::PLAYER};
     obj->name = "Player";
     
@@ -86,7 +86,7 @@ std::unique_ptr<GameObject> makePlayer(Game* game, b2World* world, glm::vec2 pos
     playerBodyDef.type = b2_dynamicBody;
     playerBodyDef.position.Set(position.x, position.y);
     playerBodyDef.fixedRotation = true;
-    b2Body* playerBody = world->CreateBody(&playerBodyDef);
+    b2Body* playerBody = world->box2dWorld.CreateBody(&playerBodyDef);
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &dynamicBox;
     fixtureDef.density = 1.0f;
@@ -103,8 +103,8 @@ std::unique_ptr<GameObject> makePlayer(Game* game, b2World* world, glm::vec2 pos
     return obj;
 }
 
-std::unique_ptr<Enemy> makeEnemy(Game* game, b2World* world, glm::vec2 position) {
-    std::unique_ptr<Enemy> obj = std::unique_ptr<Enemy>(new Enemy(game, world));
+std::unique_ptr<Enemy> makeEnemy(World* world, glm::vec2 position) {
+    std::unique_ptr<Enemy> obj = std::unique_ptr<Enemy>(new Enemy(world));
     obj->types = {GameObject::ENEMY, GameObject::GROUND};
     obj->name = "Enemy";
     
@@ -128,7 +128,7 @@ std::unique_ptr<Enemy> makeEnemy(Game* game, b2World* world, glm::vec2 position)
     enemyBodyDef.type = b2_dynamicBody;
     enemyBodyDef.position.Set(position.x, position.y);
     enemyBodyDef.fixedRotation = true;
-    b2Body* enemyBody = world->CreateBody(&enemyBodyDef);
+    b2Body* enemyBody = world->box2dWorld.CreateBody(&enemyBodyDef);
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &dynamicBox;
     fixtureDef.density = 1.0f;
@@ -145,8 +145,8 @@ std::unique_ptr<Enemy> makeEnemy(Game* game, b2World* world, glm::vec2 position)
     return obj;
 }
 
-std::unique_ptr<GameObject> makeGroundType(Game* game, b2World* world, Box bodyDef) {
-    std::unique_ptr<GameObject> obj = std::unique_ptr<GameObject>(new GameObject(game, world));
+std::unique_ptr<GameObject> makeGroundType(World* world, Box bodyDef) {
+    std::unique_ptr<GameObject> obj = std::unique_ptr<GameObject>(new GameObject(world));
     obj->types = {GameObject::GROUND};
     obj->name = "Ground";
     
@@ -156,7 +156,7 @@ std::unique_ptr<GameObject> makeGroundType(Game* game, b2World* world, Box bodyD
 
     b2BodyDef groundBodyDef;
     groundBodyDef.position.Set(bodyDef.position.x, bodyDef.position.y);
-    b2Body* groundBody = world->CreateBody(&groundBodyDef);
+    b2Body* groundBody = world->box2dWorld.CreateBody(&groundBodyDef);
     b2PolygonShape b2GroundBox;
     b2GroundBox.SetAsBox(bodyDef.scale.x / 2, bodyDef.scale.y / 2);
     b2Fixture* groundFixture = groundBody->CreateFixture(&b2GroundBox, 0.0f);
@@ -170,7 +170,7 @@ std::unique_ptr<GameObject> makeGroundType(Game* game, b2World* world, Box bodyD
     return obj;
 }
 
-std::vector<std::unique_ptr<GameObject>> makeGround(Game* game, b2World* world, GridPos gridPos, Grid grid) {
+std::vector<std::unique_ptr<GameObject>> makeGround(World* world, GridPos gridPos, Grid grid) {
     glm::vec2 gridStart;
     gridStart.x = gridPos.x * GRID_SIZE;
     gridStart.y = gridPos.y * GRID_SIZE;
@@ -179,20 +179,23 @@ std::vector<std::unique_ptr<GameObject>> makeGround(Game* game, b2World* world, 
     for (int y = 0; y < GRID_SIZE; ++y) {
         for (int x = 0; x < GRID_SIZE; ++x) {
             if (grid.blocks[y * GRID_SIZE + x] != air) {
-                groundBodies.push_back(std::move(makeGroundType(game, world, Box{gridStart + glm::vec2{x + 0.5f, y + 0.5f}, {1, 1}})));
+                groundBodies.push_back(std::move(makeGroundType(world, Box{gridStart + glm::vec2{x + 0.5f, y + 0.5f}, {1, 1}})));
             }
         }
     }
     return groundBodies;
 }
 
-GameObject::GameObject(Game* game, b2World* world) : world(world), game(game) {
-    game->gameObjects.insert(this);
+GameObject::GameObject(World* world) : world(world) {
+    world->gameObjects.insert(this);
 }
 GameObject::~GameObject() {
     rigidBody->DestroyFixture(fixture);
-    world->DestroyBody(rigidBody);
-    game->gameObjects.erase(this);
+    world->box2dWorld.DestroyBody(rigidBody);
+    world->gameObjects.erase(this);
+}
+void GameObject::update(double timeStep, World* world) {
+    behavior->update(timeStep, world);
 }
 
 void Game::BeginContact(b2Contact* contact) {
