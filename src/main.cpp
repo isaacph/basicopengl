@@ -13,6 +13,8 @@
 #include "graphics/simple.h"
 #include "graphics/texture.h"
 #include "graphics/texbuffer.h"
+#include "graphics/spritesheet.h"
+#include "graphics/wave.h"
 #include "util.h"
 #include <span>
 #include <box2d/box2d.h>
@@ -66,11 +68,14 @@ void Game::run() {
     glfwSwapInterval(1);
 
     {
+        GLuint texEnemy1 = makeNearestTexture("res/enemy1.png");
         GLuint tex = makeNearestTexture("res/tilesheet.png");
         GLuint tex2 = makeNearestTexture("res/dirt2.png");
         GLuint tex3= makeNearestTexture("res/person.png");
         SimpleRender simpleRender;
         TextureRender textureRender;
+        SpritesheetRender spritesheetRender;
+        WaveRender waveRender;
         float x=0.0f, y=0.0f, gx=200.0f;
 
         double currentTime = glfwGetTime();
@@ -104,6 +109,13 @@ void Game::run() {
 
         std::unique_ptr<GameObject> player = makePlayer(this, &box2dWorld, {0.0f, -5.0f});
         std::unique_ptr<GameObject> ground = makeGroundType(this, &box2dWorld, Box{{0.0f, 5.0f}, {20.0f, 10.0f}});
+        std::unique_ptr<Enemy> enemy = makeEnemy(this, &box2dWorld, {5.0f, -5.0f});
+
+        struct Wave {
+            glm::vec2 center;
+            float timer;
+        };
+        std::vector<Wave> waves;
 
         std::map<GridPos, TexturedBuffer> gridRendering;
         std::map<GridPos, std::vector<std::unique_ptr<GameObject>>> gridHitboxes;
@@ -212,6 +224,63 @@ void Game::run() {
                 velocity.y = limitMagnitude(velocity.y, MAX_VERTICAL_VELOCITY);
                 player->rigidBody->SetLinearVelocity(velocity);
 
+                std::vector<int> wavesToDelete;
+                for (int i = 0; i < (int) waves.size(); ++i) {
+                    Wave& wave = waves[i];
+                    wave.timer += delta;
+                    if (wave.timer > 1.0f) {
+                        wavesToDelete.push_back(i);
+                    }
+                }
+                for (int i = (int) wavesToDelete.size() - 1; i >= 0; --i) {
+                    int index = wavesToDelete[i];
+                    waves.erase(waves.begin() + index);
+                }
+
+                bool playerInRange = (player->rigidBody->GetPosition() - enemy->rigidBody->GetPosition()).Length() < 8;
+                switch (enemy->mode) {
+                    case Enemy::ASLEEP:
+                        if (playerInRange) {
+                            enemy->timer += delta;
+                            if (enemy->timer > 0.5f) {
+                                enemy->mode = Enemy::AWAKE;
+                                enemy->timer -= 0.5f;
+                                enemy->faceRight = player->rigidBody->GetPosition().x > enemy->rigidBody->GetPosition().x;
+                            }
+                        } else {
+                            enemy->timer -= delta;
+                            enemy->timer = std::max(enemy->timer, 0.0f);
+                        }
+                        break;
+                    case Enemy::AWAKE:
+                        if (!playerInRange) {
+                            enemy->mode = Enemy::ASLEEP;
+                            enemy->timer = 0.5f;
+                        } else {
+                            enemy->timer += delta;
+                            if (enemy->timer > 0.2f) {
+                                enemy->mode = Enemy::ATTACKED;
+                                enemy->timer -= 0.2f;
+                                Wave wave;
+                                wave.center = glm::vec2(enemy->rigidBody->GetPosition().x + (!enemy->faceRight ? -0.76f : 0.76f), enemy->rigidBody->GetPosition().y - 0.65f);
+                                wave.timer = 0.0f;
+                                waves.push_back(wave);
+                            }
+                        }
+                        break;
+                    case Enemy::ATTACKED:
+                        enemy->timer += delta;
+                        if (enemy->timer > 1.0f) {
+                            enemy->mode = Enemy::AWAKE;
+                            enemy->timer -= 1.0f;
+                            enemy->faceRight = player->rigidBody->GetPosition().x > enemy->rigidBody->GetPosition().x;
+                        }
+                        break;
+                    default:
+                        enemy->timer = 0.0f;
+                        enemy->mode = Enemy::ASLEEP;
+                }
+
                 for (GameObject* obj : gameObjects) {
                     if (obj->rigidBody->IsAwake()) {
                         obj->onGround = false;
@@ -236,6 +305,7 @@ void Game::run() {
                 playerRenderBox.position.x += 0.05f;
                 playerRenderBox.scale = {-playerScale, playerScale};
             }
+
             glm::mat4 playerMatrix;
             playerMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(playerRenderBox.position.x, playerRenderBox.position.y, 0));
             playerMatrix = glm::rotate(playerMatrix, player->rigidBody->GetAngle(), glm::vec3(0, 0, 1));
@@ -254,6 +324,28 @@ void Game::run() {
             glBindTexture(GL_TEXTURE_2D, tex2);
             textureRender.render(proj * camera.getView() * groundMatrix, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0);
 
+            Box enemyRenderBox = {
+                {enemy->rigidBody->GetPosition().x, enemy->rigidBody->GetPosition().y - 0.5f},
+                {enemy->faceRight ? -2.0f : 2.0f, 2.0f}
+            };
+            int enemyFrame = 0;
+            switch (enemy->mode) {
+                case Enemy::ASLEEP:
+                    enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
+                    break;
+                case Enemy::AWAKE:
+                    enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
+                    break;
+                case Enemy::ATTACKED:
+                    enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
+                    break;
+            }
+
+            glm::mat4 enemyMatrix;
+            enemyMatrix = toMatrix(enemyRenderBox);
+            glBindTexture(GL_TEXTURE_2D, texEnemy1);
+            spritesheetRender.render(proj * camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+
             for (const auto& p : gridRendering) {
                 GridPos pos = p.first;
                 const TexturedBuffer& draw = p.second;
@@ -262,6 +354,20 @@ void Game::run() {
                 gridBox.scale = {GRID_SIZE, GRID_SIZE};
                 glBindTexture(GL_TEXTURE_2D, tex);
                 draw.render(proj * camera.getView() * toMatrix(gridBox), glm::vec4(1.0f), 0);
+            }
+
+            for (Wave wave : waves) {
+                Box bounds;
+                bounds.position = wave.center;
+                bounds.scale.x = std::max(0.1f, wave.timer) * 15.0f;
+                bounds.scale.y = bounds.scale.x;
+                float relativeRadius = wave.timer < 0.1f ? wave.timer / 0.1f * 0.4f : 0.4f;
+                float relativeThickness = wave.timer < 0.1f ? 0.2f : 0.2f * 1.0f / bounds.scale.x;
+                float transparency = constrain(wave.timer < 0.8f ? 1.0f : 1.0f - (wave.timer - 0.8f) / 0.2f, 0.0f, 1.0f) * 0.8f;
+                
+                glm::mat4 waveMatrix = toMatrix(bounds);
+                waveRender.render(proj * camera.getView() * waveMatrix, glm::vec4(1.0f, 1.0f, 1.0f, transparency), relativeRadius, relativeThickness);
+                //waveRender.render(glm::mat4(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, transparency), relativeRadius, relativeThickness);
             }
 
             glfwSwapBuffers(window);

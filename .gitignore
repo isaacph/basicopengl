@@ -1,5 +1,5 @@
 build/*
-Session.vim
+*.vim
 CMakeCache.txt
 CMakeFiles
 CMakeFiles/*

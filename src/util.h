@@ -20,4 +20,9 @@ inline float limitMagnitude(float x, float max) {
     return x;
 }
 
+template <typename T>
+inline T constrain(T x, T min, T max) {
+    return std::min(max, std::max(min, x));
+}
+
 #endif

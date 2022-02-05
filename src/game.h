@@ -72,7 +72,7 @@ class Game;
 class GameObject {
 public:
     enum Type {
-        PLAYER, GROUND
+        PLAYER, GROUND, ENEMY
     };
     std::set<Type> types;
     std::string name;
@@ -80,16 +80,27 @@ public:
     b2Body* rigidBody;
     b2Fixture* fixture;
     GameObject(Game* game, b2World* world);
-    ~GameObject();
+    virtual ~GameObject();
 
     bool onGround = false;
     float airTime = 0;
+    bool faceRight = true;
 private:
     b2World* world;
     Game* game;
 };
 
+class Enemy : public GameObject {
+public:
+    inline Enemy(Game* game, b2World* world) : GameObject(game, world) {}
+    float timer = 0.0f;
+    enum Mode {
+        ASLEEP, AWAKE, ATTACKED
+    } mode = ASLEEP;
+};
+
 std::unique_ptr<GameObject> makePlayer(Game* game, b2World* world, glm::vec2 position);
+std::unique_ptr<Enemy> makeEnemy(Game* game, b2World* world, glm::vec2 position);
 std::unique_ptr<GameObject> makeGroundType(Game * game, b2World* world, Box bodyDef);
 std::vector<std::unique_ptr<GameObject>> makeGround(Game* game, b2World* world, GridPos gridPos, Grid grid);
 
