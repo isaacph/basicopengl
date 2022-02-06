@@ -65,6 +65,7 @@ void Game::run() {
 
     {
         GLuint texEnemy1 = makeNearestTexture("res/enemy1.png");
+        GLuint texEnemy2 = makeNearestTexture("res/enemy2.png");
         GLuint tex = makeNearestTexture("res/tilesheet.png");
         GLuint tex2 = makeNearestTexture("res/dirt2.png");
         GLuint tex3= makeNearestTexture("res/person.png");
@@ -187,28 +188,78 @@ void Game::run() {
             glBindTexture(GL_TEXTURE_2D, tex2);
             textureRender.render(proj * world.camera.getView() * groundMatrix, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0);
 
-            Enemy* enemy = world.enemy.get();
-            Box enemyRenderBox = {
-                {enemy->rigidBody->GetPosition().x, enemy->rigidBody->GetPosition().y - 0.5f},
-                {enemy->faceRight ? -2.0f : 2.0f, 2.0f}
-            };
-            int enemyFrame = 0;
-            switch (enemy->mode) {
-                case Enemy::ASLEEP:
-                    enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
-                    break;
-                case Enemy::AWAKE:
-                    enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
-                    break;
-                case Enemy::ATTACKED:
-                    enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
-                    break;
-            }
+            for (GameObject* gameObject : world.gameObjects) {
+                if (gameObject->name == "EnemyClap") {
+                    EnemyClap* enemy = reinterpret_cast<EnemyClap*>(gameObject->behavior.get());
+                    Box enemyRenderBox = {
+                        {gameObject->rigidBody->GetPosition().x, gameObject->rigidBody->GetPosition().y - 0.5f},
+                        {gameObject->faceRight ? -2.0f : 2.0f, 2.0f}
+                    };
+                    int enemyFrame = 0;
+                    switch (enemy->mode) {
+                        case EnemyClap::ASLEEP:
+                            enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
+                            break;
+                        case EnemyClap::AWAKE:
+                            enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
+                            break;
+                        case EnemyClap::ATTACKED:
+                            enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
+                            break;
+                    }
+                    glm::mat4 enemyMatrix;
+                    enemyMatrix = toMatrix(enemyRenderBox);
+                    glBindTexture(GL_TEXTURE_2D, texEnemy1);
+                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+                }
 
-            glm::mat4 enemyMatrix;
-            enemyMatrix = toMatrix(enemyRenderBox);
-            glBindTexture(GL_TEXTURE_2D, texEnemy1);
-            spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+                if (gameObject->name == "EnemyShoot") {
+                    EnemyShoot* enemy = reinterpret_cast<EnemyShoot*>(gameObject->behavior.get());
+                    Box enemyRenderBox = {
+                        {gameObject->rigidBody->GetPosition().x, gameObject->rigidBody->GetPosition().y - 0.5f},
+                        {gameObject->faceRight ? -2.0f : 2.0f, 2.0f}
+                    };
+                    int enemyFrame = 0;
+                    switch (enemy->mode) {
+                        case EnemyShoot::ASLEEP:
+                            enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
+                            break;
+                        case EnemyShoot::PRESHOOT:
+                            enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
+                            break;
+                        case EnemyShoot::POSTSHOOT:
+                            enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
+                            break;
+                    }
+                    glm::mat4 enemyMatrix;
+                    enemyMatrix = toMatrix(enemyRenderBox);
+                    glBindTexture(GL_TEXTURE_2D, texEnemy2);
+                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+                }
+
+                if (gameObject->name == "EnemyShootPiece") {
+                    Box renderBox = {
+                        {gameObject->rigidBody->GetPosition().x, gameObject->rigidBody->GetPosition().y},
+                        {gameObject->faceRight ? -2.0f : 2.0f, 2.0f}
+                    };
+                    int enemyFrame = 0;
+                    switch (enemy->mode) {
+                        case EnemyShoot::ASLEEP:
+                            enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
+                            break;
+                        case EnemyShoot::PRESHOOT:
+                            enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
+                            break;
+                        case EnemyShoot::POSTSHOOT:
+                            enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
+                            break;
+                    }
+                    glm::mat4 enemyMatrix;
+                    enemyMatrix = toMatrix(enemyRenderBox);
+                    glBindTexture(GL_TEXTURE_2D, texEnemy2);
+                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+                }
+            }
 
             for (const auto& p : gridRendering) {
                 GridPos pos = p.first;

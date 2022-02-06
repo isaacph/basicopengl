@@ -70,7 +70,6 @@ struct BoxBodyType : public BodyType {
 
 class World;
 class Game;
-class Ability;
 class Behavior;
 class GameObject {
 public:
@@ -93,19 +92,11 @@ public:
     // list of things this GameObject can do
     // to avoid duplication of code if multiple enemy types with different behaviors
     // can do similar things
-    std::vector<std::unique_ptr<Ability>> abilities;
 
     // this is the script that controls this GameObject
     std::unique_ptr<Behavior> behavior;
 private:
     World* world;
-};
-
-class Ability {
-public:
-    inline Ability(GameObject* gameObject) : gameObject(gameObject) {}
-    inline virtual ~Ability() {}
-    GameObject* const gameObject;
 };
 
 class Behavior {
@@ -114,6 +105,32 @@ public:
     inline virtual ~Behavior() {}
     virtual void update(double timeStep, World* world) = 0;
     GameObject* const gameObject;
+};
+
+class EnemyClap : public Behavior {
+public:
+    inline EnemyClap(GameObject* gameObject) : Behavior(gameObject) {}
+    virtual void update(double timeStep, World* world);
+    float timer = 0.0f;
+    enum Mode {
+        ASLEEP, AWAKE, ATTACKED
+    } mode = ASLEEP;
+};
+
+class EnemyShoot : public Behavior {
+public:
+    inline EnemyShoot(GameObject* gameObject) : Behavior(gameObject) {}
+    virtual void update(double timeStep, World* world);
+    float timer = 0.0f;
+    enum Mode {
+        ASLEEP, PRESHOOT, POSTSHOOT
+    } mode = ASLEEP;
+    struct Piece {
+        std::unique_ptr<GameObject> gameObject;
+        glm::vec2 mainPos;
+        glm::vec2 size;
+    };
+    std::vector<Piece> pieces;
 };
 
 class Enemy : public GameObject {
@@ -143,11 +160,13 @@ public:
 
     std::unique_ptr<GameObject> player;
     std::unique_ptr<GameObject> ground;
-    std::unique_ptr<Enemy> enemy;
+    std::unique_ptr<GameObject> enemy;
+    std::unique_ptr<GameObject> enemy2;
 };
 
 std::unique_ptr<GameObject> makePlayer(World* world, glm::vec2 position);
-std::unique_ptr<Enemy> makeEnemy(World* world, glm::vec2 position);
+std::unique_ptr<GameObject> makeEnemyClap(World* world, glm::vec2 position);
+std::unique_ptr<GameObject> makeEnemyShoot(World* world, glm::vec2 position);
 std::unique_ptr<GameObject> makeGroundType(World* world, Box bodyDef);
 std::vector<std::unique_ptr<GameObject>> makeGround(World* world, GridPos gridPos, Grid grid);
 

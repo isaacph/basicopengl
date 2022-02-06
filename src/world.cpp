@@ -8,11 +8,16 @@ const float MOVE_INTERPOLATE_DISTANCE_LIMIT = 0.1f;
 World::World() {
     player = makePlayer(this, {0.0f, -5.0f});
     ground = makeGroundType(this, Box{{0.0f, 5.0f}, {20.0f, 10.0f}});
-    enemy = makeEnemy(this, {5.0f, -5.0f});
+    enemy = makeEnemyClap(this, {5.0f, -5.0f});
+    enemy2 = makeEnemyShoot(this, {5.0f, -5.0f});
 }
 
 // later replace GLFWwindow* api use with a controller abstraction of some sort
 void World::update(double timeStep, GLFWwindow* window) {
+    for (GameObject* gameObject : gameObjects) {
+        gameObject->update(timeStep, this);
+    }
+
     // player movement
     // options I can think of for limiting movement:
     // only applyForce when velocity in a direction is below a limit
@@ -86,50 +91,6 @@ void World::update(double timeStep, GLFWwindow* window) {
     for (int i = (int) wavesToDelete.size() - 1; i >= 0; --i) {
         int index = wavesToDelete[i];
         waves.erase(waves.begin() + index);
-    }
-
-    bool playerInRange = (player->rigidBody->GetPosition() - enemy->rigidBody->GetPosition()).Length() < 8;
-    switch (enemy->mode) {
-        case Enemy::ASLEEP:
-            if (playerInRange) {
-                enemy->timer += timeStep;
-                if (enemy->timer > 0.5f) {
-                    enemy->mode = Enemy::AWAKE;
-                    enemy->timer -= 0.5f;
-                    enemy->faceRight = player->rigidBody->GetPosition().x > enemy->rigidBody->GetPosition().x;
-                }
-            } else {
-                enemy->timer -= timeStep;
-                enemy->timer = std::max(enemy->timer, 0.0f);
-            }
-            break;
-        case Enemy::AWAKE:
-            if (!playerInRange) {
-                enemy->mode = Enemy::ASLEEP;
-                enemy->timer = 0.5f;
-            } else {
-                enemy->timer += timeStep;
-                if (enemy->timer > 0.2f) {
-                    enemy->mode = Enemy::ATTACKED;
-                    enemy->timer -= 0.2f;
-                    Wave wave;
-                    wave.center = glm::vec2(enemy->rigidBody->GetPosition().x + (!enemy->faceRight ? -0.76f : 0.76f), enemy->rigidBody->GetPosition().y - 0.65f);
-                    wave.timer = 0.0f;
-                    waves.push_back(wave);
-                }
-            }
-            break;
-        case Enemy::ATTACKED:
-            enemy->timer += timeStep;
-            if (enemy->timer > 1.0f) {
-                enemy->mode = Enemy::AWAKE;
-                enemy->timer -= 1.0f;
-                enemy->faceRight = player->rigidBody->GetPosition().x > enemy->rigidBody->GetPosition().x;
-            }
-            break;
-        default:
-            enemy->timer = 0.0f;
-            enemy->mode = Enemy::ASLEEP;
     }
 
     for (GameObject* obj : gameObjects) {
