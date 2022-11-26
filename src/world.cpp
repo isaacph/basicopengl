@@ -9,7 +9,7 @@ World::World() {
     player = makePlayer(this, {0.0f, -5.0f});
     ground = makeGroundType(this, Box{{0.0f, 5.0f}, {20.0f, 10.0f}});
     enemy = makeEnemyClap(this, {5.0f, -5.0f});
-    enemy2 = makeEnemyShoot(this, {5.0f, -5.0f});
+    enemy2 = makeEnemyShoot(this, {-5.0f, -5.0f});
 }
 
 // later replace GLFWwindow* api use with a controller abstraction of some sort

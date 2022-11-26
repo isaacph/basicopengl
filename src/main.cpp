@@ -215,49 +215,59 @@ void Game::run() {
 
                 if (gameObject->name == "EnemyShoot") {
                     EnemyShoot* enemy = reinterpret_cast<EnemyShoot*>(gameObject->behavior.get());
+                    BoxBodyType* body = reinterpret_cast<BoxBodyType*>(gameObject->bodyType.get());
                     Box enemyRenderBox = {
                         {gameObject->rigidBody->GetPosition().x, gameObject->rigidBody->GetPosition().y - 0.5f},
-                        {gameObject->faceRight ? -2.0f : 2.0f, 2.0f}
+                        glm::vec2{body->scale.x, body->scale.y} * 2.0f
                     };
                     int enemyFrame = 0;
                     switch (enemy->mode) {
                         case EnemyShoot::ASLEEP:
-                            enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
+                            enemyFrame = 1;
                             break;
                         case EnemyShoot::PRESHOOT:
-                            enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
+                            enemyFrame = 2;
                             break;
                         case EnemyShoot::POSTSHOOT:
-                            enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
+                            enemyFrame = 2;
                             break;
                     }
                     glm::mat4 enemyMatrix;
                     enemyMatrix = toMatrix(enemyRenderBox);
                     glBindTexture(GL_TEXTURE_2D, texEnemy2);
-                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(2, 2, enemyFrame));
                 }
 
                 if (gameObject->name == "EnemyShootPiece") {
+                    EnemyShoot::Piece* behavior = reinterpret_cast<EnemyShoot::Piece*>(gameObject->behavior.get());
+                    BoxBodyType* body = reinterpret_cast<BoxBodyType*>(gameObject->bodyType.get());
                     Box renderBox = {
                         {gameObject->rigidBody->GetPosition().x, gameObject->rigidBody->GetPosition().y},
-                        {gameObject->faceRight ? -2.0f : 2.0f, 2.0f}
+                        {1.0f, 1.0f}
                     };
-                    int enemyFrame = 0;
-                    switch (enemy->mode) {
-                        case EnemyShoot::ASLEEP:
-                            enemyFrame = constrain((int) (enemy->timer / (0.5f / 2)), 0, 1);
-                            break;
-                        case EnemyShoot::PRESHOOT:
-                            enemyFrame = constrain((int) (2 + enemy->timer / (0.2f / 2)), 2, 3);
-                            break;
-                        case EnemyShoot::POSTSHOOT:
-                            enemyFrame = constrain((int) (5 - (enemy->timer - 0.8f) / (0.2f / 2)), 3, 4);
-                            break;
-                    }
                     glm::mat4 enemyMatrix;
-                    enemyMatrix = toMatrix(enemyRenderBox);
+                    enemyMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(renderBox.position.x, renderBox.position.y, 0));
+                    enemyMatrix = glm::rotate(enemyMatrix, gameObject->rigidBody->GetAngle(), glm::vec3(0, 0, 1));
+                    if (behavior->pieceNum == 0) {
+                        enemyMatrix = glm::translate(enemyMatrix, glm::vec3(3.5f/16.0f, 4.5f/16.0f, 0));
+                    }
+                    if (behavior->pieceNum == 1) {
+                        enemyMatrix = glm::translate(enemyMatrix, glm::vec3(4.5f/16.0f, 3/16.0f, 0));
+                    }
+                    if (behavior->pieceNum == 4) {
+                        enemyMatrix = glm::translate(enemyMatrix, glm::vec3(4.0f/16.0f, 4.0f/16.0f, 0));
+                    }
+                    if (behavior->pieceNum == 5) {
+                        enemyMatrix = glm::translate(enemyMatrix, glm::vec3(3.5f/16.0f, 3.5f/16.0f, 0));
+                    }
+                    enemyMatrix = glm::scale(enemyMatrix, glm::vec3(renderBox.scale.x, renderBox.scale.y, 0));
+                    glm::mat4 hitboxMatrix;
+                    hitboxMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(gameObject->rigidBody->GetPosition().x, gameObject->rigidBody->GetPosition().y, 0));
+                    hitboxMatrix = glm::rotate(hitboxMatrix, gameObject->rigidBody->GetAngle(), glm::vec3(0, 0, 1));
+                    hitboxMatrix = glm::scale(hitboxMatrix, glm::vec3(body->scale.x, body->scale.y, 0));
                     glBindTexture(GL_TEXTURE_2D, texEnemy2);
-                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, enemyFrame));
+                    //simpleRender.render(proj * world.camera.getView() * hitboxMatrix, glm::vec4(1.0f));
+                    spritesheetRender.render(proj * world.camera.getView() * enemyMatrix, glm::vec4(1.0f), 0, textureGrid(4, 4, behavior->pieceNum));
                 }
             }
 

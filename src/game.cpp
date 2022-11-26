@@ -119,6 +119,11 @@ std::unique_ptr<GameObject> makeGroundType(World* world, Box bodyDef) {
     b2GroundBox.SetAsBox(bodyDef.scale.x / 2, bodyDef.scale.y / 2);
     b2Fixture* groundFixture = groundBody->CreateFixture(&b2GroundBox, 0.0f);
     groundFixture->SetFriction(0.8f);
+    b2Filter filter;
+    filter.categoryBits = 1;
+    filter.groupIndex = 0;
+    filter.maskBits = 0xFFFF;
+    groundFixture->SetFilterData(filter);
 
     obj->rigidBody = groundBody;
     obj->fixture = groundFixture;

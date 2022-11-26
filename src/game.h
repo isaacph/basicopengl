@@ -125,12 +125,14 @@ public:
     enum Mode {
         ASLEEP, PRESHOOT, POSTSHOOT
     } mode = ASLEEP;
-    struct Piece {
-        std::unique_ptr<GameObject> gameObject;
+    struct Piece : public Behavior {
+        inline Piece(GameObject* gameObject) : Behavior(gameObject) {}
+        inline virtual void update(double timeStep, World* world) {}
         glm::vec2 mainPos;
         glm::vec2 size;
+        int pieceNum;
     };
-    std::vector<Piece> pieces;
+    std::vector<std::unique_ptr<GameObject>> pieces;
 };
 
 class Enemy : public GameObject {
